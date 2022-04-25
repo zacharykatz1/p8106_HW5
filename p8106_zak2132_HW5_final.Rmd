@@ -1,0 +1,118 @@
+---
+title: "P8106: Data Science II, Homework #5"
+author: 'Zachary Katz (UNI: zak2132)'
+date: "5/5/2022"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    toc: yes
+    toc_depth: 3
+  header-includes:
+    -\usepackage{fancyhdr}
+    -\usepackage{lipsum}
+    -\pagestyle{fancy}
+    -\fancyhead[R]{\thepage}
+    -\fancypagestyle{plain}{\pagestyle{fancy}}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(viridis)
+library(caret)
+library(mlbench)
+library(ISLR)
+library(e1071) # helps tune SVM model
+library(kernlab) # also implements SVM
+
+# Set global options for embedding plots and choosing themes
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, 
+                      fig.align = "center", cache = TRUE, 
+                      fig.width = 6, fig.asp = 0.6, out.width = "90%")
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+# Question 1
+
+## Set-Up and Data Preprocessing
+
+```{r}
+set.seed(2132)
+
+# Load data, clean column names, eliminate rows containing NA entries
+cars_data = read_csv("./Data/auto.csv") %>% 
+  janitor::clean_names() %>% 
+  na.omit() %>% 
+  distinct() %>% 
+  mutate(
+    cylinders = as.factor(cylinders),
+    origin = case_when(origin == "1" ~ "American",
+                       origin == "2" ~ "European",
+                       origin == "3" ~ "Japanese"),
+    origin = as.factor(origin),
+    mpg_cat = as.factor(mpg_cat),
+    mpg_cat = fct_relevel(mpg_cat, "low", "high")
+  ) %>% 
+  as.data.frame()
+
+# Partition data into training/test sets (70% split)
+indexTrain = createDataPartition(y = cars_data$mpg_cat,
+                                 p = 0.7,
+                                 list = FALSE)
+```
+
+## Part (a): Support Vector Classifier
+
+```{r}
+# Set seed
+set.seed(2132)
+
+# Fit model with tune.svm (no `caret`)
+linear_svc = tune.svm(mpg_cat ~ .,
+                      data = cars_data[indexTrain, ],
+                      kernel = "linear",
+                      cost = exp(seq(-5, 2, len = 50)),
+                      scale = TRUE)
+```
+
+```{r}
+# Plot cost against error with cross-validation
+plot(linear_svc)
+
+# Extract optimal tuning parameter with minimum cross-validation error
+linear_svc$best.parameters
+
+# Extract final model and summarize
+best_linear_svc = linear_svc$best.model
+summary(best_linear_svc)
+```
+
+```{r}
+# Training error
+
+# Check confusion matrix; 93% accurate (7% training error rate)
+confusionMatrix(data = linear_svc$best.model$fitted, 
+                reference = cars_data$mpg_cat[indexTrain])
+```
+
+```{r}
+# Test error
+
+# Make predictions
+linear_test_preds = predict(best_linear_svc, newdata = cars_data[-indexTrain, ])
+
+# Check confusion matrix; 94% accurate (6% test error rate)
+confusionMatrix(data = linear_test_preds, 
+                reference = cars_data$mpg_cat[-indexTrain])
+```
+
