@@ -23,8 +23,13 @@ library(viridis)
 library(caret)
 library(mlbench)
 library(ISLR)
-library(e1071) # helps tune SVM model
-library(kernlab) # also implements SVM
+library(e1071)
+library(kernlab)
+library(factoextra)
+library(gridExtra)
+library(corrplot) 
+library(RColorBrewer)
+library(gplots)
 
 # Set global options for embedding plots and choosing themes
 knitr::opts_chunk$set(warning = FALSE, message = FALSE, 
@@ -71,7 +76,9 @@ indexTrain = createDataPartition(y = cars_data$mpg_cat,
                                  list = FALSE)
 ```
 
-## Part (a): Support Vector Classifier
+## Part (a): Support Vector Classifier (Linear Kernel)
+
+After loading the data, we fit a support vector classifier (linear kernel) to the training data.
 
 ```{r}
 # Set seed
@@ -85,6 +92,8 @@ linear_svc = tune.svm(mpg_cat ~ .,
                       scale = TRUE)
 ```
 
+With cross-validation, we find the optimal tuning parameter is when cost is 4.81352, which minimizes the error.
+
 ```{r}
 # Plot cost against error with cross-validation
 plot(linear_svc)
@@ -96,6 +105,8 @@ linear_svc$best.parameters
 best_linear_svc = linear_svc$best.model
 summary(best_linear_svc)
 ```
+
+The optimal support vector classifier with linear kernel incorrectly classifies 20 out of 276 training observations, giving a 7.2% error rate. When applied to the test data, it incorrectly classifies 7 out of 116 observations, leading to a 6.0% error rate.
 
 ```{r}
 # Training error
@@ -115,4 +126,119 @@ linear_test_preds = predict(best_linear_svc, newdata = cars_data[-indexTrain, ])
 confusionMatrix(data = linear_test_preds, 
                 reference = cars_data$mpg_cat[-indexTrain])
 ```
+
+## Part (b): Support Vector Machine (Radial Kernel)
+
+Now, we want to try a support vector machine with radial kernel, which gives a nonlinear decision boundary. 
+
+```{r}
+# Set seed
+set.seed(2132)
+
+# Fit model with tune.svm (no `caret`)
+radial_svm = tune.svm(mpg_cat ~ .,
+                      data = cars_data[indexTrain, ],
+                      kernel = "radial",
+                      cost = exp(seq(-5, 2, len = 50)),
+                      gamma = exp(seq(-6,-2,len = 20)),
+                      scale = TRUE)
+```
+
+With cross-validation, we find the optimal tuning parameters of cost = 2.04 and gamma = 0.11, then use the best model to determine our training and testing error rates.
+
+```{r}
+# Performance plotted across tuning parameters
+plot(radial_svm, transform.y = log, transform.x = log, color.palette = terrain.colors)
+
+# Optimal tuning parameters
+best_radial <- radial_svm$best.parameters
+
+# Extract final model and summarize
+best_radial_svm = radial_svm$best.model
+summary(best_radial_svm)
+```
+
+The best radial kernel SVM performs a bit better than the best linear kernel SVC when obtained using cross-validation on the training data; our radial SVM incorrectly classifies 17 out of 276, i.e has a training error rate of 6.2%. However, the radial kernel SVM actually does worse than the linear SVC when applied to the unseen test data, incorrectly classifying 8 out of 116, or ~6.9%, of our testing set observations.
+
+```{r}
+# Training error
+
+# Check confusion matrix; 94% accurate (6% training error rate)
+confusionMatrix(data = radial_svm$best.model$fitted, 
+                reference = cars_data$mpg_cat[indexTrain])
+```
+
+```{r}
+# Test error
+
+# Make predictions
+radial_test_preds = predict(best_radial_svm, newdata = cars_data[-indexTrain, ])
+
+# Check confusion matrix; 93% accurate (7% test error rate)
+confusionMatrix(data = radial_test_preds, 
+                reference = cars_data$mpg_cat[-indexTrain])
+```
+
+# Question 2
+
+## Part (a): Hierarchical Clustering (Without Scaling)
+
+```{r}
+# Load data
+data(USArrests)
+
+arrests_data = USArrests %>% as.data.frame()
+```
+
+```{r}
+# Hierarchical clustering with complete linkage and Euclidean distance, no scaling
+cluster_no_scale = hclust(dist(arrests_data), method = "complete")
+```
+
+Without scaling our variables, we perform hierarchical clustering with complete linkage and Euclidean distance, then build a dendrogram that has three distinct clusters, as below.
+
+```{r}
+# Cut the dendrogram at a height that results in three distinct clusters
+fviz_dend(cluster_no_scale, k = 3,    
+          cex = 0.3, 
+          palette = "jco",
+          color_labels_by_k = TRUE,
+          rect = TRUE, rect_fill = TRUE, rect_border = "jco",
+          labels_track_height = 2.5)
+```
+
+Each cluster has a number of states included in it. For example, the first cluster has Florida, North Carolina, New York, Michigan, among others. The second cluster includes Missouri, Arkansas, Tennessee -- and not just Southern states, but also some others, like Wyoming and Oregon. Finally, the third cluster contains, Ohio, Utah, and a number of other states, all the way through North Dakota and Vermont. There doesn't seem to be any discernible pattern, at least based on geography, in the clustering.
+
+## Part (b): Hierarchical Clustering (With Scaling)
+
+```{r}
+# Scale and center data
+arrests_data_scaled = scale(arrests_data, center = TRUE, scale = TRUE)
+```
+
+```{r}
+# Hierarchical clustering with complete linkage and Euclidean distance, with scaling
+cluster_scale = hclust(dist(arrests_data_scaled), method = "complete")
+```
+
+In this example, we perform the same kind of Hierarchical clustering with Euclidean distance and complete linkage, but first make sure that our variables are scaled to have standard deviation equal to 1, as well as centered. The dendrogram cut at a height that results in three distinct clusters is shown below.
+
+```{r}
+# Cut the dendrogram at a height that results in three distinct clusters
+fviz_dend(cluster_scale, k = 3,    
+          cex = 0.3, 
+          palette = "jco",
+          color_labels_by_k = TRUE,
+          rect = TRUE, rect_fill = TRUE, rect_border = "jco",
+          labels_track_height = 2.5)
+```
+
+In this example, we have one cluster with many more states than each of the other two.
+
+## Part (c): Considerations
+
+Scaling the variables does indeed change the clustering results. Because our clustering algorithms require some definition of distance (here, Euclidean), failing to scale our numeric variables means that we may unfairly attribute more importance to those variables that have greater magnitudes. In our case, that means that without scaling, we're more likely to cluster based on `assault` or `urbanpop`, since these tend to have greater values per unit population than `murder` or `rape`. Once we've scaled our data, we observe that the clusters do change compared to what we observe without scaling. With scaling, we have one cluster that contains South Dakota, West Virginia, etc.; another cluster with Colorado, California, Nevada, etc. [this cluster actually seems to have more populous states in general, with Texas and New York as well]; and a third cluster with Alaska, Alabama, Louisiana, Georgia, and a number of other mostly Southern U.S. states.
+
+In my opinion, for the reasons stated above, the variables should be scaled before the inter-observation dissimilarities are computed in order to ensure our variables are of comparable units. In the cases of `murder`, `assault`, and `rape`, for example, it is not enough that they are all expressed as the number of arrests per 100K residents; we also prefer each one to have SD = 1 (and mean = 0, ideally).
+
 
