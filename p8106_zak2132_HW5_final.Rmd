@@ -139,31 +139,33 @@ set.seed(2132)
 radial_svm = tune.svm(mpg_cat ~ .,
                       data = cars_data[indexTrain, ],
                       kernel = "radial",
-                      cost = exp(seq(-5, 2, len = 50)),
-                      gamma = exp(seq(-6,-2,len = 20)),
+                      cost = exp(seq(-3, 8, len = 50)),
+                      gamma = exp(seq(-4, 4, len = 20)),
                       scale = TRUE)
 ```
 
-With cross-validation, we find the optimal tuning parameters of cost = 2.04 and gamma = 0.11, then use the best model to determine our training and testing error rates.
+With cross-validation, we find the optimal tuning parameters of cost = 41.9 and gamma = 0.03, then use the best model to determine our training and testing error rates.
 
 ```{r}
 # Performance plotted across tuning parameters
 plot(radial_svm, transform.y = log, transform.x = log, color.palette = terrain.colors)
 
 # Optimal tuning parameters
-best_radial <- radial_svm$best.parameters
+best_radial = radial_svm$best.parameters
+
+best_radial
 
 # Extract final model and summarize
 best_radial_svm = radial_svm$best.model
 summary(best_radial_svm)
 ```
 
-The best radial kernel SVM performs a bit better than the best linear kernel SVC when obtained using cross-validation on the training data; our radial SVM incorrectly classifies 17 out of 276, i.e has a training error rate of 6.2%. However, the radial kernel SVM actually does worse than the linear SVC when applied to the unseen test data, incorrectly classifying 8 out of 116, or ~6.9%, of our testing set observations.
+The best radial kernel SVM performs a bit better than the best linear kernel SVC when obtained using cross-validation on the training data; our radial SVM incorrectly classifies 15 out of 276, i.e has a training error rate of 94.6%. However, the radial kernel SVM actually performs the same as the linear SVC when applied to the unseen test data, incorrectly classifying 7 out of 116, or ~6.0%, of our testing set observations.
 
 ```{r}
 # Training error
 
-# Check confusion matrix; 94% accurate (6% training error rate)
+# Check confusion matrix; 95% accurate (5% training error rate)
 confusionMatrix(data = radial_svm$best.model$fitted, 
                 reference = cars_data$mpg_cat[indexTrain])
 ```
@@ -174,7 +176,7 @@ confusionMatrix(data = radial_svm$best.model$fitted,
 # Make predictions
 radial_test_preds = predict(best_radial_svm, newdata = cars_data[-indexTrain, ])
 
-# Check confusion matrix; 93% accurate (7% test error rate)
+# Check confusion matrix; 94% accurate (6% test error rate)
 confusionMatrix(data = radial_test_preds, 
                 reference = cars_data$mpg_cat[-indexTrain])
 ```
@@ -207,7 +209,7 @@ fviz_dend(cluster_no_scale, k = 3,
           labels_track_height = 2.5)
 ```
 
-Each cluster has a number of states included in it. For example, the first cluster has Florida, North Carolina, New York, Michigan, among others. The second cluster includes Missouri, Arkansas, Tennessee -- and not just Southern states, but also some others, like Wyoming and Oregon. Finally, the third cluster contains, Ohio, Utah, and a number of other states, all the way through North Dakota and Vermont. There doesn't seem to be any discernible pattern, at least based on geography, in the clustering.
+Each cluster has a number of states included in it. For example, the first cluster has a number of quite populous states, including Florida, North Carolina, New York, Michigan, among others, as well as a few less populous states like Mississippi. The second cluster includes some Southern states, such as Missouri, Arkansas, Tennessee, but also some others, like Wyoming and Oregon. Finally, the third cluster contains some less populous states, like North Dakota and Vermont, as well as Ohio, Utah, and others. There doesn't seem to be any clearly discernible pattern when we cut at three clusters, at least based on geography, though there is somewhat noticeable grouping tendencies based on population. 
 
 ## Part (b): Hierarchical Clustering (With Scaling)
 
@@ -233,12 +235,18 @@ fviz_dend(cluster_scale, k = 3,
           labels_track_height = 2.5)
 ```
 
-In this example, we have one cluster with many more states than each of the other two.
+In this example, we have one cluster with many more states than each of the other two. See part (c) for further elaboration on the clustering outcome after scaling.
 
 ## Part (c): Considerations
 
-Scaling the variables does indeed change the clustering results. Because our clustering algorithms require some definition of distance (here, Euclidean), failing to scale our numeric variables means that we may unfairly attribute more importance to those variables that have greater magnitudes. In our case, that means that without scaling, we're more likely to cluster based on `assault` or `urbanpop`, since these tend to have greater values per unit population than `murder` or `rape`. Once we've scaled our data, we observe that the clusters do change compared to what we observe without scaling. With scaling, we have one cluster that contains South Dakota, West Virginia, etc.; another cluster with Colorado, California, Nevada, etc. [this cluster actually seems to have more populous states in general, with Texas and New York as well]; and a third cluster with Alaska, Alabama, Louisiana, Georgia, and a number of other mostly Southern U.S. states.
+Once we've scaled our data, we observe that the clusters do change compared to what we observe without scaling. With scaling, we have one cluster that contains South Dakota, West Virginia, any many other of the less populous states; another cluster with Colorado, California, Nevada, Texas, New York, and primarily more populous states with major urban metro areas; and a third cluster with Alaska, Alabama, Louisiana, Georgia, and a number of other mostly Southern U.S. states. This is different from what we find in part (a), without scaling.
 
-In my opinion, for the reasons stated above, the variables should be scaled before the inter-observation dissimilarities are computed in order to ensure our variables are of comparable units. In the cases of `murder`, `assault`, and `rape`, for example, it is not enough that they are all expressed as the number of arrests per 100K residents; we also prefer each one to have SD = 1 (and mean = 0, ideally).
+Scaling the variables does indeed change the clustering results. Because our clustering algorithms require some definition of distance (here, Euclidean), failing to scale our numeric variables means that we may unfairly attribute more importance to those variables that have greater magnitudes. In our case, that means that without scaling, we're more likely to cluster based on `assault` or `urbanpop`, since these tend to have greater values per unit population than `murder` or `rape`. As we see below, the unscaled mean for `assault` is 171 with unscaled SD of 83.3, whereas for `murder`, the unscaled mean is much lower, at 7.79, with SD 4.36.
+
+```{r}
+skimr::skim_without_charts(arrests_data)
+```
+
+In my opinion, for the reasons stated above, the variables **should be scaled before the inter-observation dissimilarities are computed** in order to ensure our variables are of comparable units. In the cases of `murder`, `assault`, and `rape`, for example, it is not enough that they are all expressed as the number of arrests per 100K residents; we also prefer each one to have SD = 1 (and mean = 0, ideally).
 
 
